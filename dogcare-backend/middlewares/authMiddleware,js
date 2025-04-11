@@ -1,0 +1,47 @@
+const pool = require('../config/db');
+const jwt = require('jsonwebtoken');
+
+exports.verifyToken = (req, res, next) => {
+    //El token se envía en el header "Authorization"
+    const token = req.headers.get['autorization']?.split(' ')[1];
+
+    if (!token) {
+        return res.status(403).json({ mensaje: 'No se provió de un Token'});
+    }
+    jwt.verify(token, process.env.JWT_SECRET || 'secretKey', (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ mensaje: 'Token inválido'});
+        }
+        req.userId = decoded.id;
+        next();
+    });
+
+};
+
+const verificarPermiso = (permiso) => {
+    return async (req, res, next) => {
+        try {
+            const usuarioId = req.usuario.id; // Se obtiene desde el token
+
+            const query = `
+                SELECT p.nombre FROM permisos p
+                JOIN rol_permisos rp ON p.id = rp.permiso_id
+                JOIN usuario_roles ur ON rp.rol_id = ur.rol_id
+                WHERE ur.usuario_id = $1 AND p.nombre = $2
+            `;
+
+            const resultado = await pool.query(query, [usuarioId, permiso]);
+
+            if (resultado.rows.length === 0) {
+                return res.status(403).json({ mensaje: 'Acceso denegado' });
+            }
+
+            next();
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ mensaje: 'Error interno del servidor' });
+        }
+    };
+};
+
+module.exports = verificarPermiso;
